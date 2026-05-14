@@ -1,54 +1,81 @@
-name: CI for 314554006
+name: CI Pipeline - Student ID 314554006
 
 on:
   push:
     branches:
-      - '**'
-
-permissions:
-  contents: read
-  checks: write
+      - main
+      - develop
+      - feature/**
+  pull_request:
+    branches:
+      - main
+      - develop
 
 jobs:
-  build-and-test:
+  ci:
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        node-version: [22.x]
+
     steps:
-      - name: Checkout code
+      # Step 1: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      # Step 2: Setup Node.js
+      - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: ${{ matrix.node-version }}
+          cache: npm
 
+      # Step 3: Install dependencies
       - name: Install dependencies
         run: npm ci
 
-      - name: Run TypeScript typecheck
+      # Step 4: TypeScript type check
+      - name: TypeScript type check
         run: npm run typecheck
 
-      - name: Run Prettier format check
+      # Step 5: Prettier format check
+      - name: Prettier format check
         run: npm run format:check
 
-      - name: Run tests and generate JUnit report
-        run: |
-          mkdir -p reports
-          npm test -- --reporter=default --reporter=junit --outputFile.junit=reports/vitest-junit.xml
+      # Step 6: Run tests with coverage
+      - name: Run tests
+        run: npm test
 
-      - name: Publish test report to GitHub Actions UI
+      # Step 7: Publish test results
+      - name: Publish test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
-        uses: dorny/test-reporter@v1
         with:
-          name: vitest
-          path: reports/vitest-junit.xml
-          reporter: junit
-          fail-on-error: true
+          files: reports/vitest-junit.xml
+          check_name: Test Results
+          comment_mode: always
 
-      - name: Upload test report artifact
-        if: always()
-        uses: actions/upload-artifact@v4
+      # Step 8: Comment on PR with test results (optional)
+      - name: Comment PR with test results
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
         with:
-          name: vitest-test-report
-          path: reports/
-          if-no-files-found: error
+          script: |
+            const fs = require('fs');
+            if (fs.existsSync('reports/vitest-junit.xml')) {
+              const xml = fs.readFileSync('reports/vitest-junit.xml', 'utf8');
+              const matches = xml.match(/tests="(\d+)"/);
+              const failureMatches = xml.match(/failures="(\d+)"/);
+              
+              if (matches) {
+                const totalTests = matches[1];
+                const failures = failureMatches ? failureMatches[1] : '0';
+                github.rest.issues.createComment({
+                  issue_number: context.issue.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body: `## Test Report\n- Total Tests: ${totalTests}\n- Failures: ${failures}`
+                });
+              }
+            }
