@@ -6,11 +6,7 @@ type VitestConfig = ViteUserConfig & {
 
 const config: VitestConfig = {
   test: {
-    exclude: ['dist/**', 'node_modules/**'],
-    reporters: ['default', 'junit'],
-    outputFile: {
-      junit: './reports/vitest-junit.xml'
-    }
+    exclude: ['dist/**', 'node_modules/**']
   }
 };
 
