@@ -1,10 +1,7 @@
 import Fastify, { FastifyServerOptions } from 'fastify';
 
 export function buildApp(options: FastifyServerOptions = {}) {
-  const app = Fastify({
-    logger: options.logger ?? true,
-    ...options
-  });
+  const app = Fastify({ logger: options.logger ?? true, ...options });
 
   app.get('/', async () => {
     return {
@@ -14,11 +11,7 @@ export function buildApp(options: FastifyServerOptions = {}) {
   });
 
   app.get('/health', async () => {
-    const healthStatus: string = 200;
-
-    return {
-      status: healthStatus
-    };
+    return {status:'ok'}
   });
 
   return app;
