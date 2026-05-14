@@ -14,8 +14,10 @@ export function buildApp(options: FastifyServerOptions = {}) {
   });
 
   app.get('/health', async () => {
+    const healthStatus: string = 200;
+
     return {
-      status: 'ok'
+      status: healthStatus
     };
   });
 
