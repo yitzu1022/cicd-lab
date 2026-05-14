@@ -1,0 +1,85 @@
+name: CI 314554006
+
+on:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  quality-checks:
+    name: Typecheck, format, and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      - name: Prettier check
+        run: npm run format:check
+
+      - name: Run tests with JUnit report
+        run: npm test -- --reporter=default --reporter=junit --outputFile=test-results/junit.xml
+
+      - name: Publish test summary
+        if: always()
+        run: |
+          node <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          const fs = require('node:fs');
+
+          const reportPath = 'test-results/junit.xml';
+
+          console.log('## Test Results');
+
+          if (!fs.existsSync(reportPath)) {
+            console.log('');
+            console.log('JUnit report was not generated. The test command may have failed before Vitest wrote results.');
+            process.exit(0);
+          }
+
+          const xml = fs.readFileSync(reportPath, 'utf8');
+          const suiteMatch = xml.match(/<testsuites\b([^>]*)>/) ?? xml.match(/<testsuite\b([^>]*)>/);
+          const attrs = Object.fromEntries(
+            [...(suiteMatch?.[1] ?? '').matchAll(/\s([A-Za-z_:][\w:.-]*)="([^"]*)"/g)].map(([, key, value]) => [key, value])
+          );
+
+          const tests = Number(attrs.tests ?? 0);
+          const failures = Number(attrs.failures ?? 0);
+          const errors = Number(attrs.errors ?? 0);
+          const skipped = Number(attrs.skipped ?? 0);
+          const passed = Math.max(tests - failures - errors - skipped, 0);
+
+          console.log('');
+          console.log('| Total | Passed | Failed | Errors | Skipped |');
+          console.log('| ---: | ---: | ---: | ---: | ---: |');
+          console.log(`| ${tests} | ${passed} | ${failures} | ${errors} | ${skipped} |`);
+
+          const failuresText = [...xml.matchAll(/<testcase\b[^>]*name="([^"]*)"[^>]*>[\s\S]*?<(failure|error)\b/g)];
+          if (failuresText.length > 0) {
+            console.log('');
+            console.log('### Failed test cases');
+            for (const [, name, type] of failuresText) {
+              console.log(`- ${name} (${type})`);
+            }
+          }
+          NODE
+
+      - name: Upload JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-junit-report
+          path: test-results/junit.xml
+          if-no-files-found: warn
